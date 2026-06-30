@@ -28,3 +28,37 @@ Expected report filenames:
 ```bash
 pytest
 ```
+
+## Docker / Compose
+
+The image runs uvicorn on port `6008` and reads reports from `/data` inside the container.
+
+`docker-compose.yml` bind-mounts the local `data/` directory as `/data:ro`, so drop your `*.md` reports and `connections.db` there (or change the volume mapping to a real host path).
+
+> **Security:** the app has no auth. Bind to `127.0.0.1` (default) and put a reverse proxy with TLS + auth in front if you expose it beyond a trusted LAN.
+
+```bash
+# build & start in the background
+docker compose up -d --build
+
+# tail logs
+docker compose logs -f
+
+# stop
+docker compose down
+```
+
+Customize the host port or data path by editing `docker-compose.yml`:
+
+```yaml
+ports:
+  - "127.0.0.1:6008:6008"   # host:container
+volumes:
+  - /srv/tinyco/data:/data:ro   # absolute host path recommended
+```
+
+Or override at run time:
+
+```bash
+DATA_DIR=/srv/tinyco/data docker compose up -d
+```

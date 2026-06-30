@@ -1,0 +1,29 @@
+services:
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tinyco-admin-530:latest
+    container_name: tinyco-admin-530
+    restart: unless-stopped
+    ports:
+      # Change the host port (left side) as needed; container always listens on 6008.
+      - "0.0.0.0:6008:6008"
+    environment:
+      DATA_DIR: /data
+      CONNECTIONS_DB: /data/connections.db
+    volumes:
+      # Bind-mount the host directory that holds *.md reports and connections.db.
+      # Update the left side to your real data path on the host.
+      - ./data:/data:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, urllib.error, sys; r = urllib.request.urlopen('http://127.0.0.1:6008/api/mikrotik', timeout=3); sys.exit(0 if r.status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

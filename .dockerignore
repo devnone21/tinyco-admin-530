@@ -1,0 +1,21 @@
+# Keep the build context small
+.git
+.gitignore
+.github
+.venv
+.pytest_cache
+__pycache__
+*.py[codz]
+*$py.class
+*.md
+!data/*.md
+LICENSE
+tests
+data/mikrotik
+data/proxmox
+*.log
+.DS_Store
+Dockerfile
+docker-compose.yml
+.dockerignore
+README.md
