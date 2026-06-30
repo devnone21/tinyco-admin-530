@@ -31,6 +31,11 @@
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  button {
+    -webkit-tap-highlight-color: rgba(88, 166, 255, 0.15);
+    touch-action: manipulation;
+  }
+
   html {
     -webkit-text-size-adjust: 100%;
     overflow-x: hidden;
@@ -163,6 +168,8 @@
     font-size: 13px;
     color: var(--muted);
     line-height: 1.6;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
   .md-render h1 { display: none; }
   .md-render h2 {
@@ -289,7 +296,7 @@
     padding: 0 4px;
   }
   #modal-close:hover { color: var(--text); }
-  #modal-body { padding: 20px; }
+  #modal-body { padding: 20px; overflow-x: auto; min-width: 0; }
 
   /* ── connections ── */
   .conn-grid {
@@ -320,7 +327,7 @@
     padding: 3px 8px;
     border-bottom: 1px solid var(--border);
   }
-  .data-table td { padding: 4px 8px; border-bottom: 1px solid #1c2128; }
+  .data-table td { padding: 4px 8px; border-bottom: 1px solid #1c2128; white-space: nowrap; }
   .data-table tr:last-child td { border-bottom: none; }
   .data-table tr:hover td { background: #1c2128; }
   .bar-wrap { display: flex; align-items: center; gap: 8px; }
@@ -369,12 +376,18 @@
   .ts { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 
   @media (max-width: 640px) {
+    body { font-size: 15px; }
     header {
       padding: 10px 12px;
       gap: 8px;
     }
     header h1 { font-size: 13px; }
     #last-refresh { display: none; }
+    #refresh-btn {
+      min-height: 44px;
+      padding: 8px 14px;
+      font-size: 13px;
+    }
     main {
       padding: 12px;
       gap: 12px;
@@ -384,8 +397,12 @@
       font-size: 12px;
     }
     .card-body { padding: 12px; }
+    .md-render { font-size: 14px; }
     .view-full-btn {
       margin-left: auto;
+      min-height: 36px;
+      padding: 6px 12px;
+      font-size: 12px;
     }
     .card-header .spacer { display: none; }
     .card-header .ts {
@@ -405,6 +422,11 @@
       border-right: none;
     }
     #modal-body { padding: 12px; }
+    #modal-close {
+      min-width: 44px;
+      min-height: 44px;
+      font-size: 20px;
+    }
     .bar-wrap { flex-wrap: wrap; }
   }
 </style>
