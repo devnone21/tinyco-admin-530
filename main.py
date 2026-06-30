@@ -4,8 +4,8 @@ Admin dashboard backend.
 - Queries connections.db for firewall snapshots
 - Serves dashboard.html as root
 
-Run (local only):  uvicorn main:app --host 127.0.0.1 --port 8000
-Run (LAN):         uvicorn main:app --host 0.0.0.0 --port 8000
+Run (local only):  uvicorn main:app --host 127.0.0.1 --port 6008
+Run (LAN):         uvicorn main:app --host 0.0.0.0 --port 6008
                    — no auth; put a reverse proxy in front if exposed beyond trusted LAN
 """
 
@@ -18,24 +18,35 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from conn_security import analyze_security
+
 # ── config ──────────────────────────────────────────────────────────────────
-DATA_DIR = Path(os.getenv("DATA_DIR", "./data"))
-CONNECTIONS_DB = Path(os.getenv("CONNECTIONS_DB", DATA_DIR / "connections.db"))
+DATA_DIR = Path(os.getenv("DATA_DIR") or "./data")
+CONNECTIONS_DB = Path(os.getenv("CONNECTIONS_DB") or DATA_DIR / "connections.db")
 HTML_FILE = Path(__file__).parent / "dashboard.html"
 
 app = FastAPI()
 
 STATIC_DIR = Path(__file__).parent / "static"
+if not STATIC_DIR.is_dir():
+    raise RuntimeError(f"static directory not found at {STATIC_DIR}")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
 def latest_report(prefix: str) -> str | None:
     pattern = str(DATA_DIR / f"{prefix}-*.md")
-    files = sorted(glob.glob(pattern), reverse=True)
+    files = glob.glob(pattern)
     if not files:
         return None
-    return Path(files[0]).read_text(encoding="utf-8")
+    latest = max(files, key=lambda p: Path(p).stat().st_mtime)
+    return Path(latest).read_text(encoding="utf-8")
+
+
+def _section_key(heading: str) -> str:
+    """First word of an H2 heading, lowercased (e.g. '## Verdict: OK' -> 'verdict')."""
+    m = re.match(r"^##\s+(\w+)", heading)
+    return m.group(1).lower() if m else ""
 
 
 def extract_sections(md: str, keep: list[str]) -> str:
@@ -51,15 +62,14 @@ def extract_sections(md: str, keep: list[str]) -> str:
     for i in range(1, len(chunks) - 1, 2):
         heading = chunks[i]
         body    = chunks[i + 1]
-        if any(k.lower() in heading.lower() for k in keep):
+        key = _section_key(heading)
+        if key in {k.lower() for k in keep}:
             sections.append(heading + body)
 
     return preamble + "\n".join(sections)
 
 
 def db_query(sql: str, params: tuple = ()) -> list[dict]:
-    if not CONNECTIONS_DB.exists():
-        raise HTTPException(404, f"connections.db not found at {CONNECTIONS_DB}")
     con = sqlite3.connect(f"file:{CONNECTIONS_DB}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     try:
@@ -104,13 +114,50 @@ def proxmox(full: bool = False):
     return out
 
 
+@app.get("/api/conn-analysis")
+def conn_analysis(full: bool = False):
+    md = latest_report("mikrotik-conn-analysis")
+    if not md:
+        raise HTTPException(404, "No connection analysis report found")
+    summary = extract_sections(md, ["verdict", "methodology"])
+    out = {"summary": summary}
+    if full:
+        out["full"] = md
+    return out
+
+
+def _verdict_from_md(md: str | None) -> str | None:
+    if not md:
+        return None
+    m = re.search(r"^## Verdict:\s*(.+)$", md, re.MULTILINE)
+    return m.group(1).strip() if m else None
+
+
+_EMPTY_CONNECTIONS = {
+    "captured_at": None,
+    "verdict": None,
+    "total_conns": 0,
+    "baseline_conns": 0,
+    "baseline_ratio": None,
+    "rules": {},
+    "watch": [],
+    "syn_sent_no_reply": [],
+    "top_src": [],
+    "protocols": [],
+    "tcp_states": [],
+}
+
+
 @app.get("/api/connections")
 def connections():
+    if not CONNECTIONS_DB.exists():
+        return _EMPTY_CONNECTIONS
+
     latest = db_query(
         "SELECT captured_at FROM connections ORDER BY captured_at DESC LIMIT 1"
     )
     if not latest:
-        return {"captured_at": None, "top_src": [], "protocols": [], "tcp_states": []}
+        return _EMPTY_CONNECTIONS
 
     ts = latest[0]["captured_at"]
 
@@ -141,9 +188,15 @@ def connections():
         ORDER BY cnt DESC
     """, (ts,))
 
+    security = analyze_security(db_query, ts)
+    md_verdict = _verdict_from_md(latest_report("mikrotik-conn-analysis"))
+    if md_verdict:
+        security["verdict"] = md_verdict
+
     return {
         "captured_at": ts,
         "top_src": top_src,
         "protocols": protocols,
         "tcp_states": tcp_states,
+        **security,
     }
